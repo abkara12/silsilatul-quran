@@ -13,23 +13,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/**
- * ✅ PWA metadata (App Router)
- * - Use `icons` as arrays with sizes
- * - `themeColor` is supported here, but also set it in viewport below for best support
- */
 export const metadata: Metadata = {
   title: "Al Qadr Hifz Class",
   description: "Student portal for Hifz progress tracking",
-  manifest: "/manifest.json",
+
+  // ✅ Make sure this matches the file in /public (see notes below)
+  manifest: "/manifest.webmanifest",
+
   applicationName: "Al Qadr",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Al Qadr",
   },
+
+  // ✅ This fixes the browser tab icon (favicon)
   icons: {
     icon: [
+      { url: "/favicon.ico" }, // browser tab icon
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -37,9 +38,6 @@ export const metadata: Metadata = {
   },
 };
 
-/**
- * ✅ Next.js recommends themeColor in viewport export (newer approach)
- */
 export const viewport = {
   themeColor: "#9c7c38",
 };
