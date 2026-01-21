@@ -54,6 +54,10 @@ export default function MyProgressPage() {
   const [dhor, setDhor] = useState("");
   const [weeklyGoal, setWeeklyGoal] = useState("");
 
+  // ✅ NEW: mistakes
+  const [sabakDhorMistakes, setSabakDhorMistakes] = useState("");
+  const [dhorMistakes, setDhorMistakes] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
@@ -78,6 +82,10 @@ export default function MyProgressPage() {
         setSabak(toText(data.currentSabak));
         setSabakDhor(toText(data.currentSabakDhor));
         setDhor(toText(data.currentDhor));
+
+        // ✅ NEW snapshot fields
+        setSabakDhorMistakes(toText(data.currentSabakDhorMistakes));
+        setDhorMistakes(toText(data.currentDhorMistakes));
       }
 
       // Load today's log if exists (users/{uid}/logs/{dateKey})
@@ -89,6 +97,10 @@ export default function MyProgressPage() {
         setSabakDhor(toText(d.sabakDhor));
         setDhor(toText(d.dhor));
         setWeeklyGoal(toText(d.weeklyGoal));
+
+        // ✅ NEW daily log fields
+        setSabakDhorMistakes(toText(d.sabakDhorMistakes));
+        setDhorMistakes(toText(d.dhorMistakes));
       }
     });
 
@@ -115,6 +127,10 @@ export default function MyProgressPage() {
           sabakDhor,
           dhor,
           weeklyGoal,
+
+          // ✅ NEW: mistakes saved daily
+          sabakDhorMistakes,
+          dhorMistakes,
         },
         { merge: true }
       );
@@ -127,6 +143,11 @@ export default function MyProgressPage() {
           currentSabak: sabak,
           currentSabakDhor: sabakDhor,
           currentDhor: dhor,
+
+          // ✅ NEW: store latest mistakes in snapshot too
+          currentSabakDhorMistakes: sabakDhorMistakes,
+          currentDhorMistakes: dhorMistakes,
+
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -234,8 +255,8 @@ export default function MyProgressPage() {
                       Enter today’s Hifz work
                     </h1>
                     <p className="mt-3 text-gray-700">
-                      Record your Sabak, Sabak Dhor, Dhor, and weekly goal. This saves into your
-                      personal history table.
+                      Record your Sabak, Sabak Dhor, Dhor, mistakes, and weekly goal.
+                      This saves into your personal history table.
                     </p>
                   </div>
 
@@ -276,10 +297,22 @@ export default function MyProgressPage() {
                   setValue={setSabakDhor}
                 />
                 <Field
+                  label="Sabak Dhor Mistakes"
+                  hint="Number of mistakes in sabak dhor today"
+                  value={sabakDhorMistakes}
+                  setValue={setSabakDhorMistakes}
+                />
+                <Field
                   label="Dhor"
                   hint="Older revision / strong retention"
                   value={dhor}
                   setValue={setDhor}
+                />
+                <Field
+                  label="Dhor Mistakes"
+                  hint="Number of mistakes in dhor today"
+                  value={dhorMistakes}
+                  setValue={setDhorMistakes}
                 />
                 <Field
                   label="Weekly Sabak Goal"
