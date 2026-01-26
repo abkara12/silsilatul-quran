@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../../../lib/firebase";
 
-/** -------------------- Date helpers -------------------- */
 function getDateKeySA() {
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -23,162 +22,52 @@ function getDateKeySA() {
   return `${y}-${m}-${d}`;
 }
 
-function parseDateKey(dateKey: string) {
-  // dateKey is YYYY-MM-DD
-  const [y, m, d] = dateKey.split("-").map((x) => Number(x));
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
-
-function diffDaysInclusive(startKey: string, endKey: string) {
-  const a = parseDateKey(startKey);
-  const b = parseDateKey(endKey);
-  const ms = b.getTime() - a.getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  return Math.max(0, days) + 1; // inclusive
-}
-
-// ISO week key like "2026-W05"
-function isoWeekKeyFromDateKey(dateKey: string) {
-  const d = parseDateKey(dateKey);
-  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  // ISO week algorithm
-  const day = (date.getDay() + 6) % 7; // Mon=0..Sun=6
-  date.setDate(date.getDate() - day + 3); // Thu of current week
-  const firstThursday = new Date(date.getFullYear(), 0, 4);
-  const firstDay = (firstThursday.getDay() + 6) % 7;
-  firstThursday.setDate(firstThursday.getDate() - firstDay + 3);
-
-  const weekNo =
-    1 +
-    Math.round(
-      (date.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)
-    );
-
-  const year = date.getFullYear();
-  const ww = String(weekNo).padStart(2, "0");
-  return `${year}-W${ww}`;
-}
-
 function toText(v: unknown) {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v : String(v);
 }
 
-function toBool(v: unknown) {
-  return v === true || v === "true" || v === 1 || v === "1";
+function parseDateKey(dateKey: string) {
+  // dateKey = YYYY-MM-DD
+  const [y, m, d] = dateKey.split("-").map((x) => Number(x));
+  // use UTC to avoid timezone issues
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
-/** -------------------- UI shell -------------------- */
-function Shell({
-  title,
-  subtitle,
-  rightSlot,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  rightSlot?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <main className="min-h-screen text-gray-900">
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#efe8da] via-[#f7f4ee] to-white" />
-        <div className="absolute -top-56 left-[-10%] h-[780px] w-[780px] rounded-full bg-[#9c7c38]/25 blur-3xl" />
-        <div className="absolute top-[-20%] right-[-15%] h-[900px] w-[900px] rounded-full bg-black/15 blur-3xl" />
-        <div className="absolute -bottom-72 left-[20%] h-[980px] w-[980px] rounded-full bg-[#9c7c38]/18 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.14]"
-          style={{
-            backgroundImage:
-              "linear-gradient(45deg, rgba(0,0,0,0.18) 1px, transparent 1px), linear-gradient(-45deg, rgba(0,0,0,0.18) 1px, transparent 1px)",
-            backgroundSize: "72px 72px",
-            backgroundPosition: "0 0, 36px 36px",
-          }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_circle_at_50%_12%,transparent_55%,rgba(0,0,0,0.10))]" />
-      </div>
-
-      <div className="max-w-5xl mx-auto px-5 sm:px-10 py-8 sm:py-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-          <div className="min-w-0">
-            <p className="uppercase tracking-widest text-xs text-[#9c7c38]">
-              Admin → Student
-            </p>
-            <h1 className="mt-2 text-2xl sm:text-4xl font-semibold tracking-tight break-words">
-              {title}
-            </h1>
-            {subtitle ? (
-              <p className="mt-2 text-gray-700 leading-relaxed max-w-2xl">
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
-
-          {rightSlot ? (
-            <div className="w-full sm:w-auto">{rightSlot}</div>
-          ) : null}
-        </div>
-
-        <div className="mt-7 sm:mt-8">{children}</div>
-      </div>
-    </main>
-  );
+function diffDaysInclusive(startDateKey: string, endDateKey: string) {
+  const a = parseDateKey(startDateKey).getTime();
+  const b = parseDateKey(endDateKey).getTime();
+  const days = Math.floor((b - a) / (1000 * 60 * 60 * 24));
+  // inclusive (same day => 1)
+  return Math.max(1, days + 1);
 }
 
-function LoadingCard() {
-  return (
-    <div className="rounded-3xl border border-gray-200 bg-white/60 backdrop-blur p-6 sm:p-7 shadow-sm">
-      <div className="h-5 w-40 bg-black/10 rounded-full animate-pulse" />
-      <div className="mt-3 h-10 w-2/3 bg-black/10 rounded-2xl animate-pulse" />
-      <div className="mt-6 grid gap-3">
-        <div className="h-12 bg-black/10 rounded-2xl animate-pulse" />
-        <div className="h-12 bg-black/10 rounded-2xl animate-pulse" />
-        <div className="h-12 bg-black/10 rounded-2xl animate-pulse" />
-      </div>
-    </div>
-  );
-}
-
-/** -------------------- Page -------------------- */
 export default function AdminStudentPage() {
   const params = useParams<{ uid: string }>();
   const studentUid = params.uid;
+  const router = useRouter();
 
   const [me, setMe] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [studentEmail, setStudentEmail] = useState("");
+  const [studentEmail, setStudentEmail] = useState<string>("");
 
-  // daily fields
   const [sabak, setSabak] = useState("");
   const [sabakDhor, setSabakDhor] = useState("");
   const [dhor, setDhor] = useState("");
+  const [weeklyGoal, setWeeklyGoal] = useState("");
   const [sabakDhorMistakes, setSabakDhorMistakes] = useState("");
   const [dhorMistakes, setDhorMistakes] = useState("");
 
-  // weekly goal fields (meta)
-  const [weeklyGoal, setWeeklyGoal] = useState("");
-  const [weeklyGoalWeekKey, setWeeklyGoalWeekKey] = useState("");
-  const [weeklyGoalStartDateKey, setWeeklyGoalStartDateKey] = useState("");
-  const [weeklyGoalCompletedDateKey, setWeeklyGoalCompletedDateKey] = useState("");
-  const [weeklyGoalDurationDays, setWeeklyGoalDurationDays] = useState<number | null>(null);
+  // ✅ NEW weekly goal tracking
+  const [weeklyGoalSetDateKey, setWeeklyGoalSetDateKey] = useState<string>("");
+  const [goalCompleted, setGoalCompleted] = useState(false);
 
-  // UI
-  const [markGoalCompleted, setMarkGoalCompleted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const dateKey = useMemo(() => getDateKeySA(), []);
-  const currentWeekKey = useMemo(() => isoWeekKeyFromDateKey(dateKey), [dateKey]);
-
-  // weekly goal can be set only once per week
-  const goalLockedThisWeek =
-    weeklyGoal.trim().length > 0 && weeklyGoalWeekKey === currentWeekKey;
-
-  const goalAlreadyCompleted =
-    Boolean(weeklyGoalCompletedDateKey) || (weeklyGoalDurationDays ?? 0) > 0;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -204,24 +93,13 @@ export default function AdminStudentPage() {
 
   useEffect(() => {
     async function loadStudent() {
-      // profile snapshot + weekly goal meta
+      // student profile
       const sDoc = await getDoc(doc(db, "users", studentUid));
       if (sDoc.exists()) {
         const data = sDoc.data() as any;
-
         setStudentEmail(toText(data.email));
-
         setWeeklyGoal(toText(data.weeklyGoal));
-        setWeeklyGoalWeekKey(toText(data.weeklyGoalWeekKey));
-        setWeeklyGoalStartDateKey(toText(data.weeklyGoalStartDateKey));
-        setWeeklyGoalCompletedDateKey(toText(data.weeklyGoalCompletedDateKey));
-
-        const dur = data.weeklyGoalDurationDays;
-        setWeeklyGoalDurationDays(
-          typeof dur === "number" ? dur : dur ? Number(dur) : null
-        );
-
-        // seed daily fields with "current" snapshot
+        setWeeklyGoalSetDateKey(toText(data.weeklyGoalSetDateKey));
         setSabak(toText(data.currentSabak));
         setSabakDhor(toText(data.currentSabakDhor));
         setDhor(toText(data.currentDhor));
@@ -229,23 +107,23 @@ export default function AdminStudentPage() {
         setDhorMistakes(toText(data.currentDhorMistakes));
       }
 
-      // today's log overrides if exists
+      // today's log (override if exists)
       const todayDoc = await getDoc(doc(db, "users", studentUid, "logs", dateKey));
       if (todayDoc.exists()) {
         const d = todayDoc.data() as any;
         setSabak(toText(d.sabak));
         setSabakDhor(toText(d.sabakDhor));
         setDhor(toText(d.dhor));
+        setWeeklyGoal(toText(d.weeklyGoal));
         setSabakDhorMistakes(toText(d.sabakDhorMistakes));
         setDhorMistakes(toText(d.dhorMistakes));
-
-        // allow reading weekly goal from log snapshot too (optional)
-        if (!weeklyGoal) setWeeklyGoal(toText(d.weeklyGoal));
+        setGoalCompleted(Boolean(d.goalCompleted));
+      } else {
+        setGoalCompleted(false);
       }
     }
 
     if (studentUid) loadStudent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentUid, dateKey]);
 
   async function handleSave(e: React.FormEvent) {
@@ -256,45 +134,14 @@ export default function AdminStudentPage() {
     setMsg(null);
 
     try {
-      // ---- Weekly goal meta updates ----
-      let nextGoal = weeklyGoal.trim();
-      let nextWeekKey = weeklyGoalWeekKey;
-      let nextStartKey = weeklyGoalStartDateKey;
-      let nextCompletedKey = weeklyGoalCompletedDateKey;
-      let nextDuration = weeklyGoalDurationDays;
+      // if weekly goal is being set for the first time, store start date
+      const goalSetKey = weeklyGoalSetDateKey || dateKey;
 
-      // If goal is empty, don't create meta
-      if (!nextGoal) {
-        // leave as-is (some people might want blank)
-      } else {
-        // If goal was never set, or set in a different week, allow setting (resets completion)
-        const isNewWeekGoal = !nextWeekKey || nextWeekKey !== currentWeekKey;
-        if (isNewWeekGoal) {
-          nextWeekKey = currentWeekKey;
-          nextStartKey = dateKey;
-          nextCompletedKey = "";
-          nextDuration = null;
-          setMarkGoalCompleted(false);
-        } else {
-          // Same week: lock changes
-          // (We still allow it to be saved as-is without changing the text.)
-          // If someone changed the text, revert to existing to enforce rule.
-          // If you prefer: show an error instead.
-          if (goalLockedThisWeek) {
-            // keep as typed if same value; otherwise enforce lock
-            // easiest enforcement: do nothing (it will save same value anyway)
-          }
-        }
+      // if admin ticked completed, compute duration
+      const completedInDays =
+        goalCompleted && goalSetKey ? diffDaysInclusive(goalSetKey, dateKey) : null;
 
-        // Completion (only if not already completed)
-        if (markGoalCompleted && !nextCompletedKey) {
-          const startKey = nextStartKey || dateKey;
-          nextCompletedKey = dateKey;
-          nextDuration = diffDaysInclusive(startKey, dateKey);
-        }
-      }
-
-      // ---- 1) Daily log doc ----
+      // 1) daily log
       await setDoc(
         doc(db, "users", studentUid, "logs", dateKey),
         {
@@ -303,16 +150,16 @@ export default function AdminStudentPage() {
           sabak,
           sabakDhor,
           dhor,
+          weeklyGoal,
           sabakDhorMistakes,
           dhorMistakes,
 
-          // include weekly goal snapshot for the day
-          weeklyGoal: nextGoal,
-          weeklyGoalWeekKey: nextWeekKey || null,
-          weeklyGoalStartDateKey: nextStartKey || null,
-          weeklyGoalCompletedDateKey: nextCompletedKey || null,
-          weeklyGoalDurationDays: nextDuration ?? null,
-          weeklyGoalCompleted: Boolean(nextCompletedKey),
+          // ✅ NEW weekly goal completion fields
+          weeklyGoalSetDateKey: goalSetKey,
+          goalCompleted,
+          goalCompletedDateKey: goalCompleted ? dateKey : null,
+          goalCompletedInDays: goalCompleted ? completedInDays : null,
+          goalCompletedAt: goalCompleted ? serverTimestamp() : null,
 
           updatedBy: me?.uid ?? null,
           updatedByEmail: me?.email ?? null,
@@ -320,38 +167,40 @@ export default function AdminStudentPage() {
         { merge: true }
       );
 
-      // ---- 2) User snapshot doc ----
+      // 2) snapshot on user doc
       await setDoc(
         doc(db, "users", studentUid),
         {
-          // weekly goal meta on user
-          weeklyGoal: nextGoal,
-          weeklyGoalWeekKey: nextWeekKey || null,
-          weeklyGoalStartDateKey: nextStartKey || null,
-          weeklyGoalCompletedDateKey: nextCompletedKey || null,
-          weeklyGoalDurationDays: nextDuration ?? null,
+          weeklyGoal,
+          weeklyGoalSetDateKey: goalSetKey,
 
-          // current snapshot
+          // keep “current” snapshot for student UI
           currentSabak: sabak,
           currentSabakDhor: sabakDhor,
           currentDhor: dhor,
           currentSabakDhorMistakes: sabakDhorMistakes,
           currentDhorMistakes: dhorMistakes,
+
+          // ✅ NEW completion snapshot
+          weeklyGoalCompleted: goalCompleted,
+          weeklyGoalCompletedDateKey: goalCompleted ? dateKey : null,
+          weeklyGoalCompletedInDays: goalCompleted ? completedInDays : null,
+          weeklyGoalCompletedAt: goalCompleted ? serverTimestamp() : null,
+
           updatedAt: serverTimestamp(),
           lastUpdatedBy: me?.uid ?? null,
         },
         { merge: true }
       );
 
-      // update local state so UI reflects instantly
-      setWeeklyGoal(nextGoal);
-      setWeeklyGoalWeekKey(nextWeekKey || "");
-      setWeeklyGoalStartDateKey(nextStartKey || "");
-      setWeeklyGoalCompletedDateKey(nextCompletedKey || "");
-      setWeeklyGoalDurationDays(nextDuration ?? null);
+      setWeeklyGoalSetDateKey(goalSetKey);
 
-      setMsg("Saved ✅");
-      setTimeout(() => setMsg(null), 2500);
+      setMsg(
+        goalCompleted && completedInDays
+          ? `Saved ✅ (Goal completed in ${completedInDays} days)`
+          : "Saved ✅"
+      );
+      setTimeout(() => setMsg(null), 3000);
     } catch (err: any) {
       setMsg(err?.message ? `Error: ${err.message}` : "Error saving.");
     } finally {
@@ -361,184 +210,116 @@ export default function AdminStudentPage() {
 
   if (checking) {
     return (
-      <Shell title="Loading…" subtitle="Opening student page…">
-        <LoadingCard />
-      </Shell>
+      <main className="min-h-screen p-10">
+        <div className="rounded-2xl border p-6">Loading…</div>
+      </main>
     );
   }
 
   if (!me) {
     return (
-      <Shell title="Please sign in" subtitle="You must be signed in to log work for a student.">
-        <div className="rounded-3xl border border-gray-200 bg-white/70 backdrop-blur p-6 sm:p-7 shadow-sm">
-          <p className="text-gray-700">Go to login, then return to the admin dashboard.</p>
-          <div className="mt-5 flex flex-col sm:flex-row gap-3">
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-black text-white text-sm font-semibold hover:bg-gray-900"
-            >
+      <main className="min-h-screen p-10">
+        <div className="rounded-2xl border p-6">
+          <div className="text-xl font-semibold">Please sign in</div>
+          <div className="mt-3">
+            <Link className="underline" href="/login">
               Go to login
-            </Link>
-            <Link
-              href="/admin"
-              className="inline-flex items-center justify-center h-11 px-6 rounded-full border border-gray-200 bg-white/70 hover:bg-white text-sm font-semibold"
-            >
-              Back to Admin
             </Link>
           </div>
         </div>
-      </Shell>
+      </main>
     );
   }
 
   if (!isAdmin) {
     return (
-      <Shell title="Access denied" subtitle="This account is not marked as admin.">
-        <div className="rounded-3xl border border-gray-200 bg-white/70 backdrop-blur p-6 sm:p-7 shadow-sm">
-          <div className="text-sm text-gray-600">Signed in as</div>
-          <div className="mt-1 font-semibold">{me.email}</div>
+      <main className="min-h-screen p-10">
+        <div className="rounded-2xl border p-6">
+          <div className="text-xl font-semibold">Not allowed</div>
+          <p className="mt-2 text-gray-600">You are not an admin.</p>
+          <div className="mt-4 flex gap-3">
+            <Link className="underline" href="/">
+              Home
+            </Link>
+            <Link className="underline" href="/admin">
+              Admin
+            </Link>
+          </div>
         </div>
-      </Shell>
+      </main>
     );
   }
 
   return (
-    <Shell
-      title={`Log work for ${studentEmail || "student"}`}
-      subtitle={`Submitting for ${dateKey} • ${currentWeekKey}`}
-      rightSlot={
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Link
-            href="/admin"
-            className="inline-flex w-full sm:w-auto items-center justify-center h-11 px-5 rounded-full border border-gray-200 bg-white/70 hover:bg-white transition-colors text-sm font-semibold"
-          >
-            Back
-          </Link>
-          <Link
-            href={`/admin/student/${studentUid}/overview`}
-            className="inline-flex w-full sm:w-auto items-center justify-center h-11 px-5 rounded-full bg-black text-white hover:bg-gray-900 transition-colors text-sm font-semibold shadow-sm"
-          >
-            Student Overview
-          </Link>
-        </div>
-      }
-    >
-      <div className="rounded-3xl border border-gray-200 bg-white/70 backdrop-blur p-5 sm:p-8 shadow-sm">
-        {/* status row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/70 px-4 py-2 text-xs font-semibold text-gray-700 w-fit">
-            <span className="h-2 w-2 rounded-full bg-[#9c7c38]" />
-            Update today’s work
+    <main className="min-h-screen text-gray-900">
+      <div className="max-w-3xl mx-auto px-6 py-10">
+        <div className="rounded-3xl border border-gray-200 bg-white/70 backdrop-blur p-8 shadow-sm">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <div className="text-sm text-gray-600">Admin → Student</div>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                Log work for {studentEmail || "student"}
+              </h1>
+              <p className="mt-2 text-gray-700">
+                Submitting for <span className="font-semibold">{dateKey}</span>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Link
+                className="h-10 px-4 rounded-full border border-gray-200 bg-white/70 hover:bg-white grid place-items-center text-sm"
+                href="/admin"
+              >
+                Back
+              </Link>
+              <button
+                onClick={() => router.push(`/admin/student/${studentUid}/overview`)}
+                className="h-10 px-4 rounded-full bg-black text-white hover:bg-gray-900 text-sm font-semibold"
+              >
+                Student Overview
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {weeklyGoal ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-gray-700">
-                Goal: {weeklyGoalWeekKey || currentWeekKey}
-              </span>
-            ) : null}
+          <form onSubmit={handleSave} className="mt-6 grid gap-4">
+            <Field label="Sabak" value={sabak} setValue={setSabak} hint="Example: 2 pages / 1 ruku / 5 lines" />
+            <Field label="Sabak Dhor" value={sabakDhor} setValue={setSabakDhor} hint="Revision for current sabak" />
+            <Field label="Sabak Dhor Mistakes" value={sabakDhorMistakes} setValue={setSabakDhorMistakes} hint="Number of mistakes" />
+            <Field label="Dhor" value={dhor} setValue={setDhor} hint="Older revision" />
+            <Field label="Dhor Mistakes" value={dhorMistakes} setValue={setDhorMistakes} hint="Number of mistakes" />
+            <Field label="Weekly Sabak Goal" value={weeklyGoal} setValue={setWeeklyGoal} hint="Example: 10 pages" />
 
-            {goalAlreadyCompleted ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-                Completed in {weeklyGoalDurationDays ?? "—"} day(s)
-              </span>
-            ) : weeklyGoal ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                In progress
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <form onSubmit={handleSave} className="mt-6 grid gap-4">
-          <Field label="Sabak" value={sabak} setValue={setSabak} hint="Example: 2 pages / 1 ruku / 5 lines" />
-          <Field label="Sabak Dhor" value={sabakDhor} setValue={setSabakDhor} hint="Revision for current sabak" />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Sabak Dhor Mistakes" value={sabakDhorMistakes} setValue={setSabakDhorMistakes} hint="Number" />
-            <Field label="Dhor Mistakes" value={dhorMistakes} setValue={setDhorMistakes} hint="Number" />
-          </div>
-
-          <Field label="Dhor" value={dhor} setValue={setDhor} hint="Older revision" />
-
-          {/* Weekly goal block */}
-          <div className="rounded-3xl border border-gray-200 bg-white/70 p-5 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            {/* ✅ NEW: goal completion tick */}
+            <label className="mt-2 flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white/70 px-4 py-4">
               <div>
-                <div className="text-sm font-semibold text-gray-900">Weekly Goal</div>
-                <div className="mt-1 text-sm text-gray-700">
-                  Set once per week. When the student finishes it, tick “Completed” and it will calculate how long it took.
+                <div className="text-sm font-semibold text-gray-900">Weekly goal completed</div>
+                <div className="text-xs text-gray-600">
+                  Tick this when the student finishes the weekly sabak goal.
+                  {weeklyGoalSetDateKey ? ` (Started: ${weeklyGoalSetDateKey})` : ""}
                 </div>
               </div>
+              <input
+                type="checkbox"
+                checked={goalCompleted}
+                onChange={(e) => setGoalCompleted(e.target.checked)}
+                className="h-5 w-5 accent-black"
+              />
+            </label>
 
-              <div className="text-xs text-gray-600">
-                Week: <span className="font-semibold">{currentWeekKey}</span>
-              </div>
+            <div className="pt-2 flex items-center justify-between gap-4">
+              <button
+                disabled={saving}
+                className="h-12 px-7 rounded-2xl bg-black text-white font-semibold hover:bg-gray-900 disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save for student"}
+              </button>
+
+              <div className="text-sm text-gray-700">{msg ?? ""}</div>
             </div>
-
-            <div className="mt-4 grid gap-4">
-              <label className="grid gap-2">
-                <div className="flex items-end justify-between gap-4">
-                  <span className="text-sm font-semibold text-gray-900">Weekly Sabak Goal</span>
-                  <span className="text-xs text-gray-500">
-                    {goalLockedThisWeek ? "Locked (already set this week)" : "Set it now"}
-                  </span>
-                </div>
-
-                <input
-                  value={weeklyGoal}
-                  onChange={(e) => setWeeklyGoal(e.target.value)}
-                  disabled={goalLockedThisWeek}
-                  className="h-12 rounded-2xl border border-gray-200 bg-white/80 px-4 outline-none focus:ring-2 focus:ring-[#9c7c38]/30 disabled:opacity-60"
-                  placeholder="Example: 10 pages"
-                />
-              </label>
-
-              <div className="grid gap-2 sm:grid-cols-3">
-                <MiniInfo label="Started" value={weeklyGoalStartDateKey || "—"} />
-                <MiniInfo label="Completed" value={weeklyGoalCompletedDateKey || "—"} />
-                <MiniInfo label="Duration" value={weeklyGoalDurationDays ? `${weeklyGoalDurationDays} day(s)` : "—"} />
-              </div>
-
-              {/* Complete toggle */}
-              <label className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white/70 px-4 py-4">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">Weekly Goal Completed</div>
-                  <div className="mt-1 text-xs text-gray-600">
-                    Tick this only when the student has finished their weekly goal.
-                  </div>
-                </div>
-
-                <input
-                  type="checkbox"
-                  checked={goalAlreadyCompleted ? true : markGoalCompleted}
-                  disabled={goalAlreadyCompleted || !weeklyGoal.trim()}
-                  onChange={(e) => setMarkGoalCompleted(e.target.checked)}
-                  className="h-6 w-6 accent-black disabled:opacity-50"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <button
-              disabled={saving}
-              className="h-12 w-full sm:w-auto px-7 rounded-2xl bg-black text-white font-semibold hover:bg-gray-900 disabled:opacity-60 shadow-sm"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-
-            <div
-              className={`text-sm font-medium ${
-                msg?.startsWith("Error") ? "text-red-600" : "text-gray-700"
-              }`}
-            >
-              {msg ?? ""}
-            </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </Shell>
+    </main>
   );
 }
 
@@ -566,14 +347,5 @@ function Field({
         placeholder="Type here…"
       />
     </label>
-  );
-}
-
-function MiniInfo({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white/70 px-4 py-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-gray-900 break-words">{value}</div>
-    </div>
   );
 }
