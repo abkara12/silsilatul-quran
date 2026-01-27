@@ -23,6 +23,33 @@ function getDateKeySA() {
   return `${y}-${m}-${d}`; // YYYY-MM-DD
 }
 
+function parseDateKey(dateKey: string) {
+  const [y, m, d] = dateKey.split("-").map((x) => Number(x));
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+// ISO week key like "2026-W05"
+function isoWeekKeyFromDateKey(dateKey: string) {
+  const d = parseDateKey(dateKey);
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = (date.getDay() + 6) % 7; // Mon=0..Sun=6
+  date.setDate(date.getDate() - day + 3); // Thu of current week
+
+  const firstThursday = new Date(date.getFullYear(), 0, 4);
+  const firstDay = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - firstDay + 3);
+
+  const weekNo =
+    1 +
+    Math.round(
+      (date.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1000)
+    );
+
+  const year = date.getFullYear();
+  const ww = String(weekNo).padStart(2, "0");
+  return `${year}-W${ww}`;
+}
+
 function toText(v: unknown) {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v : String(v);
@@ -44,6 +71,15 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MiniInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white/70 px-4 py-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-gray-900 break-words">{value}</div>
+    </div>
+  );
+}
+
 /* ---------------- page ---------------- */
 export default function MyProgressPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -52,19 +88,35 @@ export default function MyProgressPage() {
   const [sabak, setSabak] = useState("");
   const [sabakDhor, setSabakDhor] = useState("");
   const [dhor, setDhor] = useState("");
-  const [weeklyGoal, setWeeklyGoal] = useState("");
 
-  // ✅ NEW: mistakes
+  // mistakes
   const [sabakDhorMistakes, setSabakDhorMistakes] = useState("");
   const [dhorMistakes, setDhorMistakes] = useState("");
+
+  // Weekly goal meta (same fields as ustad uses, but student cannot complete)
+  const [weeklyGoal, setWeeklyGoal] = useState("");
+  const [weeklyGoalWeekKey, setWeeklyGoalWeekKey] = useState("");
+  const [weeklyGoalStartDateKey, setWeeklyGoalStartDateKey] = useState("");
+  const [weeklyGoalCompletedDateKey, setWeeklyGoalCompletedDateKey] = useState("");
+  const [weeklyGoalDurationDays, setWeeklyGoalDurationDays] = useState<number | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const dateKey = useMemo(() => getDateKeySA(), []);
+  const currentWeekKey = useMemo(() => isoWeekKeyFromDateKey(dateKey), [dateKey]);
 
   const goalNum = useMemo(() => num(weeklyGoal), [weeklyGoal]);
   const sabakNum = useMemo(() => num(sabak), [sabak]);
+
+  const goalReachedToday = goalNum > 0 && sabakNum >= goalNum;
+
+  // lock weekly goal edits if already set for this week
+  const goalLockedThisWeek =
+    weeklyGoal.trim().length > 0 && weeklyGoalWeekKey === currentWeekKey;
+
+  const goalAlreadyCompleted =
+    Boolean(weeklyGoalCompletedDateKey) || (weeklyGoalDurationDays ?? 0) > 0;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -78,14 +130,23 @@ export default function MyProgressPage() {
       const snap = await getDoc(snapRef);
       if (snap.exists()) {
         const data = snap.data() as any;
-        setWeeklyGoal(toText(data.weeklyGoal));
+
         setSabak(toText(data.currentSabak));
         setSabakDhor(toText(data.currentSabakDhor));
         setDhor(toText(data.currentDhor));
-
-        // ✅ NEW snapshot fields
         setSabakDhorMistakes(toText(data.currentSabakDhorMistakes));
         setDhorMistakes(toText(data.currentDhorMistakes));
+
+        // weekly meta
+        setWeeklyGoal(toText(data.weeklyGoal));
+        setWeeklyGoalWeekKey(toText(data.weeklyGoalWeekKey));
+        setWeeklyGoalStartDateKey(toText(data.weeklyGoalStartDateKey));
+        setWeeklyGoalCompletedDateKey(toText(data.weeklyGoalCompletedDateKey));
+
+        const dur = (data as any).weeklyGoalDurationDays;
+        setWeeklyGoalDurationDays(
+          typeof dur === "number" ? dur : dur ? Number(dur) : null
+        );
       }
 
       // Load today's log if exists (users/{uid}/logs/{dateKey})
@@ -96,11 +157,11 @@ export default function MyProgressPage() {
         setSabak(toText(d.sabak));
         setSabakDhor(toText(d.sabakDhor));
         setDhor(toText(d.dhor));
-        setWeeklyGoal(toText(d.weeklyGoal));
-
-        // ✅ NEW daily log fields
         setSabakDhorMistakes(toText(d.sabakDhorMistakes));
         setDhorMistakes(toText(d.dhorMistakes));
+
+        // Keep weekly goal from snapshot unless it exists on today log
+        if (toText(d.weeklyGoal)) setWeeklyGoal(toText(d.weeklyGoal));
       }
     });
 
@@ -115,6 +176,32 @@ export default function MyProgressPage() {
     setSavedMsg(null);
 
     try {
+      // -------- Weekly goal logic (student can set once per week, cannot complete) --------
+      let nextGoal = weeklyGoal.trim();
+      let nextWeekKey = weeklyGoalWeekKey;
+      let nextStartKey = weeklyGoalStartDateKey;
+
+      // Keep completion fields from existing state (these are set by ustad/admin)
+      const nextCompletedKey = weeklyGoalCompletedDateKey || "";
+      const nextDuration = weeklyGoalDurationDays ?? null;
+
+      if (nextGoal) {
+        // If new week or never set → allow setting (and set start date)
+        const isNewWeekGoal = !nextWeekKey || nextWeekKey !== currentWeekKey;
+
+        if (isNewWeekGoal) {
+          nextWeekKey = currentWeekKey;
+          nextStartKey = dateKey;
+          // DO NOT clear completed meta here (ustad controls completion),
+          // but typically completion belongs to that goal; if you want strict reset each week, uncomment:
+          // nextCompletedKey = "";
+          // nextDuration = null;
+        } else {
+          // same week → lock edits
+          // If they tried changing, just keep current value (goalLockedThisWeek disables input anyway)
+        }
+      }
+
       const logRef = doc(db, "users", user.uid, "logs", dateKey);
 
       // 1) Daily history log (one doc per day)
@@ -126,11 +213,17 @@ export default function MyProgressPage() {
           sabak,
           sabakDhor,
           dhor,
-          weeklyGoal,
 
-          // ✅ NEW: mistakes saved daily
           sabakDhorMistakes,
           dhorMistakes,
+
+          // weekly snapshot for the day
+          weeklyGoal: nextGoal,
+          weeklyGoalWeekKey: nextWeekKey || null,
+          weeklyGoalStartDateKey: nextStartKey || null,
+          weeklyGoalCompletedDateKey: nextCompletedKey || null,
+          weeklyGoalDurationDays: nextDuration,
+          weeklyGoalCompleted: Boolean(nextCompletedKey),
         },
         { merge: true }
       );
@@ -139,12 +232,16 @@ export default function MyProgressPage() {
       await setDoc(
         doc(db, "users", user.uid),
         {
-          weeklyGoal,
+          weeklyGoal: nextGoal,
+          weeklyGoalWeekKey: nextWeekKey || null,
+          weeklyGoalStartDateKey: nextStartKey || null,
+          weeklyGoalCompletedDateKey: nextCompletedKey || null,
+          weeklyGoalDurationDays: nextDuration,
+
           currentSabak: sabak,
           currentSabakDhor: sabakDhor,
           currentDhor: dhor,
 
-          // ✅ NEW: store latest mistakes in snapshot too
           currentSabakDhorMistakes: sabakDhorMistakes,
           currentDhorMistakes: dhorMistakes,
 
@@ -152,6 +249,11 @@ export default function MyProgressPage() {
         },
         { merge: true }
       );
+
+      // reflect local
+      setWeeklyGoal(nextGoal);
+      setWeeklyGoalWeekKey(nextWeekKey || "");
+      setWeeklyGoalStartDateKey(nextStartKey || "");
 
       setSavedMsg("Saved for today ✅");
       setTimeout(() => setSavedMsg(null), 3500);
@@ -204,8 +306,6 @@ export default function MyProgressPage() {
       </main>
     );
   }
-
-  const goalReached = goalNum > 0 && sabakNum >= goalNum;
 
   return (
     <main className="min-h-screen text-gray-900">
@@ -263,19 +363,23 @@ export default function MyProgressPage() {
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border ${
-                        goalReached
+                        goalAlreadyCompleted
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : goalReachedToday
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-gray-200 bg-white/60 text-gray-700"
                       }`}
                     >
                       <span
                         className={`h-2 w-2 rounded-full ${
-                          goalReached ? "bg-emerald-500" : "bg-[#9c7c38]"
+                          goalAlreadyCompleted || goalReachedToday ? "bg-emerald-500" : "bg-[#9c7c38]"
                         }`}
                       />
-                      {goalNum > 0
-                        ? goalReached
-                          ? "Goal reached"
+                      {goalAlreadyCompleted
+                        ? `Goal completed in ${weeklyGoalDurationDays ?? "—"} day(s)`
+                        : goalNum > 0
+                        ? goalReachedToday
+                          ? "Goal reached (today)"
                           : "Working toward goal"
                         : "Set a weekly goal"}
                     </span>
@@ -314,12 +418,57 @@ export default function MyProgressPage() {
                   value={dhorMistakes}
                   setValue={setDhorMistakes}
                 />
-                <Field
-                  label="Weekly Sabak Goal"
-                  hint="Example: 10 pages (used for goal indicator)"
-                  value={weeklyGoal}
-                  setValue={setWeeklyGoal}
-                />
+
+                {/* Weekly goal block (student version: no completion toggle) */}
+                <div className="rounded-3xl border border-gray-200 bg-white/70 p-5 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Weekly Goal</div>
+                      <div className="mt-1 text-sm text-gray-700">
+                        You can set this <span className="font-semibold">once per week</span>.
+                        Ustad will mark it completed when you finish.
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Week: <span className="font-semibold">{currentWeekKey}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4">
+                    <label className="grid gap-2">
+                      <div className="flex items-end justify-between gap-4">
+                        <span className="text-sm font-semibold text-gray-900">Weekly Sabak Goal</span>
+                        <span className="text-xs text-gray-500">
+                          {goalLockedThisWeek ? "Locked (already set this week)" : "Set it now"}
+                        </span>
+                      </div>
+
+                      <input
+                        value={weeklyGoal}
+                        onChange={(e) => setWeeklyGoal(e.target.value)}
+                        disabled={goalLockedThisWeek}
+                        className="h-12 rounded-2xl border border-gray-200 bg-white/80 px-4 outline-none focus:ring-2 focus:ring-[#9c7c38]/30 disabled:opacity-60"
+                        placeholder="Example: 10 pages"
+                      />
+                    </label>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <MiniInfo label="Started" value={weeklyGoalStartDateKey || "—"} />
+                      <MiniInfo label="Completed" value={weeklyGoalCompletedDateKey || "—"} />
+                      <MiniInfo
+                        label="Duration"
+                        value={weeklyGoalDurationDays ? `${weeklyGoalDurationDays} day(s)` : "—"}
+                      />
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-white/70 px-4 py-4">
+                      <div className="text-sm font-semibold text-gray-900">Completion</div>
+                      <div className="mt-1 text-xs text-gray-600">
+                        Only Ustad can mark the weekly goal as completed.
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="pt-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                   <button
@@ -356,12 +505,8 @@ export default function MyProgressPage() {
           {/* right: tips + preview */}
           <div className="lg:col-span-5 grid gap-6">
             <div className="rounded-3xl border border-gray-200 bg-gradient-to-br from-white/80 to-white/40 backdrop-blur p-8 shadow-lg">
-              <p className="uppercase tracking-widest text-xs text-[#9c7c38]">
-                Tip
-              </p>
-              <h3 className="mt-2 text-xl font-semibold tracking-tight">
-                Keep entries consistent
-              </h3>
+              <p className="uppercase tracking-widest text-xs text-[#9c7c38]">Tip</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight">Keep entries consistent</h3>
               <p className="mt-3 text-gray-700 leading-relaxed">
                 For best tracking, try to use the same unit (pages/lines/ruku) each day.
                 The goal indicator reads the first number you type.
@@ -376,15 +521,11 @@ export default function MyProgressPage() {
 
             <div className="rounded-3xl border border-gray-200 bg-black text-white p-8 shadow-xl relative overflow-hidden">
               <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-[#9c7c38]/25 blur-2xl" />
-              <p className="text-sm uppercase tracking-widest text-white/70">
-                Weekly Goal
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold">
-                Progress Indicator
-              </h3>
+              <p className="text-sm uppercase tracking-widest text-white/70">Weekly Goal</p>
+              <h3 className="mt-2 text-2xl font-semibold">Progress Indicator</h3>
               <p className="mt-3 text-white/70 leading-relaxed">
-                Goal: <span className="text-white">{goalNum || 0}</span> •
-                Today’s Sabak: <span className="text-white">{sabakNum || 0}</span>
+                Goal: <span className="text-white">{goalNum || 0}</span> • Today’s Sabak:{" "}
+                <span className="text-white">{sabakNum || 0}</span>
               </p>
 
               <div className="mt-5">
