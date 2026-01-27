@@ -21,17 +21,41 @@ function num(v: unknown) {
   return m ? Number(m[1]) : 0;
 }
 
+function parseDateKey(dateKey: string) {
+  const [y, m, d] = dateKey.split("-").map((x) => Number(x));
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+function diffDaysInclusive(startKey: string, endKey: string) {
+  const a = parseDateKey(startKey);
+  const b = parseDateKey(endKey);
+  const ms = b.getTime() - a.getTime();
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+  return Math.max(0, days) + 1; // inclusive
+}
+
 type LogRow = {
   id: string;
   dateKey?: string;
+
   sabak?: string;
+  sabakRead?: string; // ✅ read label (Excellent/Good/etc)
+
   sabakDhor?: string;
+  sabakDhorRead?: string;
+
   dhor?: string;
+  dhorRead?: string;
+
   weeklyGoal?: string;
 
-  // ✅ mistakes
   sabakDhorMistakes?: string;
   dhorMistakes?: string;
+
+  // weekly goal meta (admin saves these)
+  weeklyGoalStartDateKey?: string;
+  weeklyGoalCompletedDateKey?: string;
+  weeklyGoalDurationDays?: number | string;
 };
 
 async function fetchLogs(uid: string): Promise<LogRow[]> {
@@ -44,22 +68,6 @@ function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs font-medium text-gray-700 backdrop-blur">
       {children}
-    </span>
-  );
-}
-
-function MistakePill({ value, isBad }: { value: string; isBad: boolean }) {
-  const v = toText(value) || "—";
-  return (
-    <span
-      className={[
-        "inline-flex items-center justify-center min-w-[2.25rem] h-9 px-3 rounded-full border text-sm font-semibold",
-        isBad
-          ? "border-red-300 bg-red-50 text-red-700"
-          : "border-gray-200 bg-white/70 text-gray-800",
-      ].join(" ")}
-    >
-      {v}
     </span>
   );
 }
@@ -241,14 +249,8 @@ export default function AdminStudentOverviewPage() {
         {/* Summary cards */}
         <div className="grid sm:grid-cols-3 gap-4 mb-8">
           <StatCard label="Days logged" value={String(summary.totalDays)} />
-          <StatCard
-            label="Average Sabak"
-            value={summary.avgSabak ? summary.avgSabak.toFixed(1) : "—"}
-          />
-          <StatCard
-            label="Latest weekly goal"
-            value={summary.lastGoal ? String(summary.lastGoal) : "—"}
-          />
+          <StatCard label="Average Sabak" value={summary.avgSabak ? summary.avgSabak.toFixed(1) : "—"} />
+          <StatCard label="Latest weekly goal" value={summary.lastGoal ? String(summary.lastGoal) : "—"} />
         </div>
 
         <div className="rounded-3xl border border-gray-200 bg-white/70 backdrop-blur shadow-sm overflow-hidden">
@@ -257,14 +259,14 @@ export default function AdminStudentOverviewPage() {
               <p className="uppercase tracking-widest text-xs text-[#9c7c38]">History table</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">Student daily logs</h2>
               <p className="mt-2 text-gray-700">
-                All entries (newest → oldest). Mistakes show red when too high.
+                Same table layout as the student’s account view (newest → oldest).
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Badge>Admin view</Badge>
-              <Badge>Sorted newest → oldest</Badge>
-              <Badge>Goal indicator</Badge>
+              <Badge>Newest → oldest</Badge>
+              <Badge>Goal duration</Badge>
             </div>
           </div>
 
@@ -274,9 +276,7 @@ export default function AdminStudentOverviewPage() {
             ) : rows.length === 0 ? (
               <div className="rounded-2xl border border-gray-200 bg-white/70 p-6">
                 <div className="text-lg font-semibold">No logs yet</div>
-                <p className="mt-2 text-gray-700">
-                  Once the student has entries, they will show here.
-                </p>
+                <p className="mt-2 text-gray-700">Once the student has entries, they will show here.</p>
                 <div className="mt-4">
                   <Link
                     href={`/admin/student/${studentUid}`}
@@ -288,72 +288,134 @@ export default function AdminStudentOverviewPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-[980px] w-full">
+                <table className="min-w-[1100px] w-full border-separate border-spacing-0">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-widest text-gray-500">
-                      <th className="pb-3 pr-4">Date</th>
-                      <th className="pb-3 pr-4">Sabak</th>
-                      <th className="pb-3 pr-4">Sabak Dhor</th>
-                      <th className="pb-3 pr-4">Sabak Dhor Mistakes</th>
-                      <th className="pb-3 pr-4">Dhor</th>
-                      <th className="pb-3 pr-4">Dhor Mistakes</th>
-                      <th className="pb-3 pr-4">Weekly Goal</th>
-                      <th className="pb-3">Goal Status</th>
+                    <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-gray-500">
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 pr-4 pl-2 border-b border-gray-200">
+                        Date
+                      </th>
+
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Sabak
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Read
+                      </th>
+
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Sabak Dhor
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Read
+                      </th>
+
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Dhor
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Read
+                      </th>
+
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        SD Mistakes
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        D Mistakes
+                      </th>
+
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Weekly Goal
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Goal Status
+                      </th>
+                      <th className="sticky top-0 bg-white/60 backdrop-blur pb-3 px-4 border-b border-gray-200 border-l border-gray-100">
+                        Duration
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-gray-200">
                     {rows.map((r) => {
                       const g = num(r.weeklyGoal);
-                      const s = num(r.sabak);
-                      const reached = g > 0 && s >= g;
 
-                      const sdMist = num(r.sabakDhorMistakes);
-                      const dMist = num(r.dhorMistakes);
+                      const startKey = toText(r.weeklyGoalStartDateKey);
+                      const completedKey = toText(r.weeklyGoalCompletedDateKey);
 
-                      const sabakDhorBad = sdMist > 4; // 5+ red
-                      const dhorBad = dMist >= 3; // 3+ red
+                      const storedDur =
+                        typeof r.weeklyGoalDurationDays === "number"
+                          ? r.weeklyGoalDurationDays
+                          : toText(r.weeklyGoalDurationDays)
+                          ? Number(r.weeklyGoalDurationDays)
+                          : null;
+
+                      const calcDur =
+                        startKey && completedKey ? diffDaysInclusive(startKey, completedKey) : null;
+
+                      const duration = storedDur ?? calcDur;
+                      const completed = Boolean(completedKey) || (duration ?? 0) > 0;
 
                       return (
-                        <tr key={r.id} className="text-sm">
-                          <td className="py-4 pr-4 font-medium text-gray-900">
+                        <tr key={r.id} className="text-sm hover:bg-black/[0.02] transition-colors">
+                          <td className="py-4 pr-4 pl-2 font-medium text-gray-900">
                             {r.dateKey ?? r.id}
                           </td>
 
-                          <td className="py-4 pr-4 text-gray-800">{toText(r.sabak) || "—"}</td>
-                          <td className="py-4 pr-4 text-gray-800">{toText(r.sabakDhor) || "—"}</td>
-
-                          <td className="py-4 pr-4">
-                            <MistakePill value={toText(r.sabakDhorMistakes)} isBad={sabakDhorBad} />
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.sabak) || "—"}
+                          </td>
+                          <td className="py-4 px-4 text-gray-700 border-l border-gray-100">
+                            {toText(r.sabakRead) || "—"}
                           </td>
 
-                          <td className="py-4 pr-4 text-gray-800">{toText(r.dhor) || "—"}</td>
-
-                          <td className="py-4 pr-4">
-                            <MistakePill value={toText(r.dhorMistakes)} isBad={dhorBad} />
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.sabakDhor) || "—"}
+                          </td>
+                          <td className="py-4 px-4 text-gray-700 border-l border-gray-100">
+                            {toText(r.sabakDhorRead) || "—"}
                           </td>
 
-                          <td className="py-4 pr-4 text-gray-800">{toText(r.weeklyGoal) || "—"}</td>
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.dhor) || "—"}
+                          </td>
+                          <td className="py-4 px-4 text-gray-700 border-l border-gray-100">
+                            {toText(r.dhorRead) || "—"}
+                          </td>
 
-                          <td className="py-4">
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.sabakDhorMistakes) || "—"}
+                          </td>
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.dhorMistakes) || "—"}
+                          </td>
+
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {toText(r.weeklyGoal) || "—"}
+                          </td>
+
+                          <td className="py-4 px-4 border-l border-gray-100">
                             {g > 0 ? (
                               <span
                                 className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border ${
-                                  reached
+                                  completed
                                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                     : "border-amber-200 bg-amber-50 text-amber-700"
                                 }`}
                               >
                                 <span
                                   className={`h-2 w-2 rounded-full ${
-                                    reached ? "bg-emerald-500" : "bg-amber-500"
+                                    completed ? "bg-emerald-500" : "bg-amber-500"
                                   }`}
                                 />
-                                {reached ? "Reached" : "In progress"}
+                                {completed ? "Completed" : "In progress"}
                               </span>
                             ) : (
                               <span className="text-xs text-gray-500">No goal set</span>
                             )}
+                          </td>
+
+                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
+                            {duration ? `${duration} day(s)` : "—"}
                           </td>
                         </tr>
                       );
@@ -375,7 +437,6 @@ function StatCard({ label, value }: { label: string; value: string }) {
     <div className="group relative overflow-hidden rounded-3xl border border-gray-200 bg-white/70 backdrop-blur p-6 shadow-sm hover:shadow-lg transition-all duration-300">
       <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-[#9c7c38] via-[#9c7c38]/60 to-transparent" />
       <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#9c7c38]/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
       <div className="text-xs uppercase tracking-widest text-gray-500">{label}</div>
       <div className="mt-2 text-3xl font-semibold tracking-tight text-gray-900">{value}</div>
     </div>
