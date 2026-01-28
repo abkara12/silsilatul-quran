@@ -7,6 +7,212 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./lib/firebase";
 
+/* ---------------- PWA Install Prompt (ALWAYS shows until installed) ---------------- */
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+function isIosDevice() {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+}
+
+function isStandaloneMode() {
+  if (typeof window === "undefined") return false;
+  const iosStandalone = (window.navigator as any).standalone === true;
+  const mql = window.matchMedia?.("(display-mode: standalone)");
+  const displayModeStandalone = mql ? mql.matches : false;
+  return iosStandalone || displayModeStandalone;
+}
+
+function InstallAppPrompt() {
+  const [open, setOpen] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [standalone, setStandalone] = useState(false);
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+
+  // Shows on every visit until installed (but if they close it, we wait a short cooldown)
+  const DISMISS_KEY = "pwa_install_dismissed_at";
+  const DISMISS_COOLDOWN_HOURS = 6;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const ios = isIosDevice();
+    setIsIOS(ios);
+
+    const standaloneNow = isStandaloneMode();
+    setStandalone(standaloneNow);
+
+    if (standaloneNow) {
+      setOpen(false);
+      return;
+    }
+
+    const dismissedAt = Number(localStorage.getItem(DISMISS_KEY) || "0");
+    const hoursSince = dismissedAt ? (Date.now() - dismissedAt) / (1000 * 60 * 60) : 999;
+
+    // iOS: no native prompt; always show our instructions
+    if (ios) {
+      if (hoursSince >= DISMISS_COOLDOWN_HOURS) setOpen(true);
+      return;
+    }
+
+    const onBIP = (e: Event) => {
+      e.preventDefault();
+      setDeferred(e as BeforeInstallPromptEvent);
+      if (hoursSince >= DISMISS_COOLDOWN_HOURS) setOpen(true);
+    };
+
+    const onInstalled = () => {
+      setOpen(false);
+      setDeferred(null);
+      localStorage.removeItem(DISMISS_KEY);
+      setStandalone(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBIP);
+    window.addEventListener("appinstalled", onInstalled);
+
+    // Some browsers (incl. some Huawei) don't fire beforeinstallprompt.
+    // Still show the modal with manual instructions.
+    if (hoursSince >= DISMISS_COOLDOWN_HOURS) setOpen(true);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBIP);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  async function handleInstall() {
+    if (!deferred) return; // show manual instructions in UI
+    try {
+      await deferred.prompt();
+      const choice = await deferred.userChoice;
+
+      if (choice.outcome === "accepted") {
+        setOpen(false);
+        localStorage.removeItem(DISMISS_KEY);
+      } else {
+        localStorage.setItem(DISMISS_KEY, String(Date.now()));
+        setOpen(false);
+      }
+    } catch {
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+      setOpen(false);
+    }
+  }
+
+  function handleClose() {
+    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    setOpen(false);
+  }
+
+  if (standalone) return null;
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={handleClose} />
+
+      <div className="relative w-full max-w-md rounded-3xl border border-white/30 bg-white/75 backdrop-blur-2xl shadow-2xl overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#9c7c38]/18 blur-3xl" />
+          <div className="absolute -bottom-28 -left-28 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+        </div>
+
+        <div className="relative p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-widest text-[#9c7c38]">Install App</div>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight text-gray-900">
+                Add Al Qadr to your Home Screen
+              </h3>
+              <p className="mt-2 text-sm text-gray-700 leading-relaxed">
+                This is the main feature — students should install it like an app for quick access.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClose}
+              className="shrink-0 h-10 w-10 rounded-full border border-gray-200 bg-white/70 hover:bg-white transition-colors grid place-items-center"
+              aria-label="Close"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                <path
+                  d="M6 6l12 12M18 6l-12 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {isIOS ? (
+            <div className="mt-5 rounded-2xl border border-gray-200 bg-white/70 p-4 text-sm text-gray-700">
+              <div className="font-semibold text-gray-900">On iPhone / iPad (Safari):</div>
+              <ol className="mt-2 space-y-1 list-decimal list-inside">
+                <li>Tap the <span className="font-semibold">Share</span> button</li>
+                <li>Select <span className="font-semibold">Add to Home Screen</span></li>
+                <li>Tap <span className="font-semibold">Add</span></li>
+              </ol>
+              <div className="mt-3 text-xs text-gray-500">
+                Apple doesn’t allow an automatic install popup — this is the correct method.
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-gray-200 bg-white/70 p-4 text-sm text-gray-700">
+              {deferred ? (
+                <div>
+                  Tap <span className="font-semibold">Install</span> to add it to your Home Screen.
+                </div>
+              ) : (
+                <div>
+                  If your phone doesn’t show the install popup, try:
+                  <div className="mt-2 text-xs text-gray-600">
+                    Browser menu (⋮) → <span className="font-semibold">Install app</span> /{" "}
+                    <span className="font-semibold">Add to Home screen</span>. <br />
+                    Best results: <span className="font-semibold">Chrome</span>.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-5 flex gap-3">
+            {!isIOS ? (
+              <button
+                type="button"
+                onClick={handleInstall}
+                className="flex-1 h-12 rounded-2xl bg-black text-white font-semibold hover:bg-gray-900 transition-colors disabled:opacity-60"
+                disabled={!deferred}
+              >
+                Install
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleClose}
+              className="flex-1 h-12 rounded-2xl border border-gray-200 bg-white/70 hover:bg-white transition-colors font-semibold"
+            >
+              Not now
+            </button>
+          </div>
+
+          <div className="mt-4 text-xs text-gray-500">
+            This message will keep showing until the app is installed.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ✅ Icons */
 function MenuIcon() {
   return (
@@ -38,9 +244,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      className={`h-5 w-5 transition-transform duration-300 ${
-        open ? "rotate-180" : "rotate-0"
-      }`}
+      className={`h-5 w-5 transition-transform duration-300 ${open ? "rotate-180" : "rotate-0"}`}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
@@ -67,12 +271,7 @@ function DotArrowIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path
-        d="M4.5 12h9"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M4.5 12h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -90,9 +289,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
       <div className="flex items-center justify-between gap-6">
         <h4 className="text-lg font-semibold text-gray-900">{question}</h4>
         <span className="flex items-center gap-3 text-[#9c7c38]">
-          <span className="hidden sm:inline text-sm font-medium">
-            {open ? "Close" : "Open"}
-          </span>
+          <span className="hidden sm:inline text-sm font-medium">{open ? "Close" : "Open"}</span>
           <span className="grid place-items-center h-10 w-10 rounded-full bg-[#9c7c38]/10 text-[#9c7c38]">
             <ChevronIcon open={open} />
           </span>
@@ -101,9 +298,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 
       <div
         className={`grid transition-all duration-400 ease-out ${
-          open
-            ? "grid-rows-[1fr] opacity-100 mt-4"
-            : "grid-rows-[0fr] opacity-0 mt-0"
+          open ? "grid-rows-[1fr] opacity-100 mt-4" : "grid-rows-[0fr] opacity-0 mt-0"
         }`}
       >
         <div className="overflow-hidden">
@@ -156,18 +351,11 @@ function MenuRow({
 }) {
   const base =
     "group relative overflow-hidden rounded-2xl border px-4 py-4 text-sm font-semibold transition-all duration-300";
-  const primary =
-    "border-black bg-black text-white hover:bg-gray-900 shadow-sm";
-  const normal =
-    "border-gray-200 bg-white/70 text-gray-900 hover:bg-white shadow-sm";
+  const primary = "border-black bg-black text-white hover:bg-gray-900 shadow-sm";
+  const normal = "border-gray-200 bg-white/70 text-gray-900 hover:bg-white shadow-sm";
 
   return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={`${base} ${variant === "primary" ? primary : normal}`}
-    >
-      {/* glow */}
+    <Link href={href} onClick={onClick} className={`${base} ${variant === "primary" ? primary : normal}`}>
       <div
         className={`pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
           variant === "primary" ? "bg-white/15" : "bg-[#9c7c38]/14"
@@ -178,11 +366,7 @@ function MenuRow({
         <div>
           <div className="text-base leading-tight">{label}</div>
           {sub ? (
-            <div
-              className={`mt-1 text-xs font-medium ${
-                variant === "primary" ? "text-white/70" : "text-gray-600"
-              }`}
-            >
+            <div className={`mt-1 text-xs font-medium ${variant === "primary" ? "text-white/70" : "text-gray-600"}`}>
               {sub}
             </div>
           ) : null}
@@ -190,9 +374,7 @@ function MenuRow({
 
         <div
           className={`grid place-items-center h-10 w-10 rounded-full transition-all duration-300 ${
-            variant === "primary"
-              ? "bg-white/10 text-white"
-              : "bg-[#9c7c38]/10 text-[#9c7c38]"
+            variant === "primary" ? "bg-white/10 text-white" : "bg-[#9c7c38]/10 text-[#9c7c38]"
           } group-hover:scale-[1.04]`}
         >
           <DotArrowIcon />
@@ -251,46 +433,42 @@ export default function Home() {
 
   return (
     <main id="top" className="min-h-screen bg-transparent text-gray-900">
-      {/* ✅ MORE MODERN BACKGROUND */}
+      {/* ✅ ALWAYS-ON install prompt until installed */}
+      <InstallAppPrompt />
+
+      {/* ✅ DARKER / MORE MODERN BACKGROUND */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        {/* base */}
-<div className="absolute inset-0 bg-gradient-to-b from-[#e5dcc6] via-[#f0eadf] to-[#f7f5f0]" />
+        {/* darker base */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#d7ccb3] via-[#e6decd] to-[#f2efe8]" />
 
-        {/* mesh blobs */}
-        <div className="absolute -top-64 left-[-12%] h-[860px] w-[860px] rounded-full bg-[#9c7c38]/22 blur-3xl" />
-<div className="absolute top-[-20%] right-[-15%] h-[900px] w-[900px] rounded-full bg-black/28 blur-3xl" />
-        <div className="absolute -bottom-80 left-[22%] h-[1040px] w-[1040px] rounded-full bg-[#2f6f6f]/12 blur-3xl" />
+        {/* blobs */}
+        <div className="absolute -top-64 left-[-12%] h-[860px] w-[860px] rounded-full bg-[#9c7c38]/24 blur-3xl" />
+        <div className="absolute top-[-20%] right-[-15%] h-[900px] w-[900px] rounded-full bg-black/35 blur-3xl" />
+        <div className="absolute -bottom-80 left-[22%] h-[1040px] w-[1040px] rounded-full bg-[#2f6f6f]/14 blur-3xl" />
 
-        {/* subtle conic highlight */}
-        <div className="absolute inset-0 opacity-[0.22] bg-[conic-gradient(from_210deg_at_70%_20%,rgba(156,124,56,0.16),transparent_25%,rgba(0,0,0,0.10),transparent_55%,rgba(47,111,111,0.12),transparent_85%)]" />
+        {/* conic highlight */}
+        <div className="absolute inset-0 opacity-[0.24] bg-[conic-gradient(from_210deg_at_70%_20%,rgba(156,124,56,0.18),transparent_25%,rgba(0,0,0,0.14),transparent_55%,rgba(47,111,111,0.14),transparent_85%)]" />
 
-        {/* modern grid (softer) */}
+        {/* grid */}
         <div
-          className="absolute inset-0 opacity-[0.10]"
+          className="absolute inset-0 opacity-[0.12]"
           style={{
             backgroundImage:
-              "linear-gradient(0deg, rgba(0,0,0,0.20) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.20) 1px, transparent 1px)",
+              "linear-gradient(0deg, rgba(0,0,0,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.22) 1px, transparent 1px)",
             backgroundSize: "120px 120px",
             backgroundPosition: "0 0",
           }}
         />
 
-        {/* vignette */}
-        <div className="absolute inset-0 bg-[radial-gradient(900px_circle_at_50%_12%,transparent_55%,rgba(0,0,0,0.10))]" />
+        {/* vignette (stronger) */}
+        <div className="absolute inset-0 bg-[radial-gradient(900px_circle_at_50%_12%,transparent_50%,rgba(0,0,0,0.18))]" />
       </div>
 
       {/* NAVBAR */}
       <header className="max-w-7xl mx-auto px-6 sm:px-10 py-7 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-            <Image
-              src="/logo.png"
-              alt="Al Qadr"
-              width={58}
-              height={58}
-              className="rounded"
-              priority
-            />
+            <Image src="/logo.png" alt="Al Qadr" width={58} height={58} className="rounded" priority />
           </div>
         </div>
 
@@ -298,7 +476,7 @@ export default function Home() {
         <div className="hidden lg:flex items-center gap-3">
           <Link
             href="/contact"
-            className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-800 hover:bg-white/60 transition-colors"
+            className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-900 hover:bg-white/60 transition-colors"
           >
             Contact
           </Link>
@@ -308,7 +486,7 @@ export default function Home() {
               {isAdmin ? (
                 <Link
                   href="/admin"
-                  className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-800 hover:bg-white/60 transition-colors"
+                  className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-900 hover:bg-white/60 transition-colors"
                 >
                   Admin Dashboard
                 </Link>
@@ -316,7 +494,7 @@ export default function Home() {
 
               <Link
                 href="/my-progress"
-                className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-800 hover:bg-white/60 transition-colors"
+                className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-900 hover:bg-white/60 transition-colors"
               >
                 My Progress
               </Link>
@@ -331,7 +509,7 @@ export default function Home() {
             <>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-800 hover:bg-white/60 transition-colors"
+                className="inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-medium text-gray-900 hover:bg-white/60 transition-colors"
               >
                 Sign In
               </Link>
@@ -365,13 +543,13 @@ export default function Home() {
         <div className="fixed inset-0 z-50">
           <div
             onClick={closeMenu}
-            className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-[650ms] ease-out ${
+            className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-[650ms] ease-out ${
               menuState === "open" ? "opacity-100" : "opacity-0"
             }`}
           />
 
           <div
-            className={`absolute right-0 top-0 h-full w-[92%] max-w-sm border-l border-white/40 bg-white/70 backdrop-blur-2xl shadow-2xl transition-transform duration-[650ms] ease-[cubic-bezier(.16,1,.3,1)] ${
+            className={`absolute right-0 top-0 h-full w-[92%] max-w-sm border-l border-white/40 bg-white/75 backdrop-blur-2xl shadow-2xl transition-transform duration-[650ms] ease-[cubic-bezier(.16,1,.3,1)] ${
               menuState === "open" ? "translate-x-0" : "translate-x-full"
             }`}
           >
@@ -385,18 +563,11 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-                    <Image
-                      src="/logo.png"
-                      alt="Al Qadr"
-                      width={58}
-                      height={58}
-                      className="rounded"
-                      priority
-                    />
+                    <Image src="/logo.png" alt="Al Qadr" width={58} height={58} className="rounded" priority />
                   </div>
                   <div>
                     <div className="text-sm font-semibold leading-tight">Al Qadr</div>
-                    <div className="text-xs text-gray-600">Hifdh Class • Menu</div>
+                    <div className="text-xs text-gray-700">Hifdh Class • Menu</div>
                   </div>
                 </div>
 
@@ -414,9 +585,7 @@ export default function Home() {
               <div className="mt-6 flex items-center justify-between gap-3 rounded-3xl border border-gray-200 bg-white/60 px-4 py-3 shadow-sm">
                 <div>
                   <div className="text-xs uppercase tracking-widest text-[#9c7c38]">Status</div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {user ? "Signed in" : "Guest"}
-                  </div>
+                  <div className="text-sm font-semibold text-gray-900">{user ? "Signed in" : "Guest"}</div>
                 </div>
 
                 <div
@@ -426,11 +595,7 @@ export default function Home() {
                       : "border-gray-200 bg-white/60 text-gray-700"
                   }`}
                 >
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      user ? "bg-emerald-500" : "bg-[#9c7c38]"
-                    }`}
-                  />
+                  <span className={`h-2 w-2 rounded-full ${user ? "bg-emerald-500" : "bg-[#9c7c38]"}`} />
                   {user ? "Active" : "Not logged in"}
                 </div>
               </div>
@@ -446,12 +611,7 @@ export default function Home() {
                 {user ? (
                   <>
                     {isAdmin ? (
-                      <MenuRow
-                        href="/admin"
-                        label="Admin Dashboard"
-                        sub="Manage students"
-                        onClick={closeMenu}
-                      />
+                      <MenuRow href="/admin" label="Admin Dashboard" sub="Manage students" onClick={closeMenu} />
                     ) : null}
 
                     <MenuRow
@@ -461,21 +621,11 @@ export default function Home() {
                       onClick={closeMenu}
                       variant="primary"
                     />
-                    <MenuRow
-                      href="/overview"
-                      label="Overview"
-                      sub="See your history"
-                      onClick={closeMenu}
-                    />
+                    <MenuRow href="/overview" label="Overview" sub="See your history" onClick={closeMenu} />
                   </>
                 ) : (
                   <>
-                    <MenuRow
-                      href="/login"
-                      label="Sign In"
-                      sub="Continue your journey"
-                      onClick={closeMenu}
-                    />
+                    <MenuRow href="/login" label="Sign In" sub="Continue your journey" onClick={closeMenu} />
                     <MenuRow
                       href="/signup"
                       label="Sign Up"
@@ -490,12 +640,10 @@ export default function Home() {
               <div className="mt-auto pt-6">
                 <div className="rounded-3xl border border-gray-200 bg-white/60 px-5 py-4 shadow-sm">
                   <div className="text-xs uppercase tracking-widest text-[#9c7c38]">Quick tip</div>
-                  <div className="mt-1 text-sm text-gray-700">
-                    Add this site to your home screen.
-                  </div>
+                  <div className="mt-1 text-sm text-gray-700">Add this site to your home screen.</div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                <div className="mt-4 flex items-center justify-between text-xs text-gray-600">
                   <span>© {new Date().getFullYear()} Al Qadr</span>
                   <button
                     type="button"
@@ -517,20 +665,19 @@ export default function Home() {
           <div className="lg:col-span-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/60 backdrop-blur px-4 py-2 text-sm">
               <span className="h-2 w-2 rounded-full bg-[#9c7c38]" />
-              <span className="text-gray-700">Northcliff • Hifdh Class</span>
+              <span className="text-gray-800">Northcliff • Hifdh Class</span>
             </div>
 
             <h1 className="mt-6 text-4xl sm:text-6xl font-bold leading-[1.05] tracking-tight">
               Preserve the Qur’an.
               <br />
-              {/* ✅ slightly different accent color */}
-              <span className="text-[#8B6B2E]">Elevate the Heart.</span>
+              <span className="text-[#9c7c38]">Elevate the Heart.</span>
             </h1>
 
-            <p className="mt-6 text-lg sm:text-xl text-gray-700 leading-relaxed max-w-2xl">
-              Join the Al Qadr Hifdh Program in Northcliff — a journey of memorisation,
-              discipline, and spiritual growth. Track your daily Sabak, Dhor, Sabak Dhor and weekly
-              goals — all in one place.
+            <p className="mt-6 text-lg sm:text-xl text-gray-800 leading-relaxed max-w-2xl">
+              Join the Al Qadr Hifdh Program in Northcliff — a journey of memorisation, discipline,
+              and spiritual growth. Track your daily Sabak, Dhor, Sabak Dhor and weekly goals — all
+              in one place.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
@@ -588,17 +735,8 @@ export default function Home() {
                   v: "Strong retention",
                   icon: (
                     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
-                      <path
-                        d="M12 6v6l4 2"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
+                      <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" />
                     </svg>
                   ),
                 },
@@ -636,8 +774,8 @@ export default function Home() {
                       {item.icon}
                     </div>
                     <div>
-                      <div className="text-sm text-gray-600">{item.k}</div>
-                      <div className="mt-0.5 font-semibold">{item.v}</div>
+                      <div className="text-sm text-gray-700">{item.k}</div>
+                      <div className="mt-0.5 font-semibold text-gray-900">{item.v}</div>
                     </div>
                   </div>
                 </div>
@@ -652,7 +790,7 @@ export default function Home() {
                 will remember?”
               </p>
               <div className="mt-5 flex items-center justify-between">
-                <p className="text-sm text-gray-500">Surah Al-Qamar • 54:17</p>
+                <p className="text-sm text-gray-600">Surah Al-Qamar • 54:17</p>
               </div>
             </div>
 
@@ -665,10 +803,7 @@ export default function Home() {
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3">
                 {["Sabak", "Sabak Dhor", "Dhor", "Weekly Goal"].map((t) => (
-                  <div
-                    key={t}
-                    className="rounded-2xl bg-white/10 border border-white/10 px-4 py-3"
-                  >
+                  <div key={t} className="rounded-2xl bg-white/10 border border-white/10 px-4 py-3">
                     <div className="text-sm text-white/80">{t}</div>
                     <div className="mt-1 text-sm font-semibold">—</div>
                   </div>
@@ -683,23 +818,16 @@ export default function Home() {
       <section id="about" className="py-20">
         <div className="max-w-5xl mx-auto px-6 sm:px-10">
           <div className="rounded-3xl border border-gray-200 bg-white/60 backdrop-blur p-10 shadow-sm">
-            <p className="uppercase tracking-widest text-sm text-[#9c7c38] mb-3">
-              About the Madrassah
-            </p>
+            <p className="uppercase tracking-widest text-sm text-[#9c7c38] mb-3">About the Madrassah</p>
 
-            <h2 className="text-4xl font-semibold tracking-tight">
-              A Peaceful & Disciplined Environment for Hifdh
-            </h2>
+            <h2 className="text-4xl font-semibold tracking-tight">A Peaceful & Disciplined Environment for Hifdh</h2>
 
             <div className="mt-6 grid md:grid-cols-2 gap-8">
-              <p className="text-gray-700 leading-relaxed text-lg">
-                Located in Northcliff, the Al Qadr Hifdh class offers a peaceful and disciplined
-                environment where students build a deep and lasting connection with the Qur’an.
+              <p className="text-gray-800 leading-relaxed text-lg">
+                Located in Northcliff, the Al Qadr Hifdh class offers a peaceful and disciplined environment where students build a deep and lasting connection with the Qur’an.
               </p>
-              <p className="text-gray-700 leading-relaxed text-lg">
-                Through a structured system emphasising focused Sabak, consistent Dhor, and clear
-                weekly targets, students are guided step by step in their memorisation journey —
-                while nurturing discipline, consistency, and good character.
+              <p className="text-gray-800 leading-relaxed text-lg">
+                Through a structured system emphasising focused Sabak, consistent Dhor, and clear weekly targets, students are guided step by step in their memorisation journey — while nurturing discipline, consistency, and good character.
               </p>
             </div>
           </div>
@@ -711,12 +839,8 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 sm:px-10">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10">
             <div>
-              <p className="uppercase tracking-widest text-sm text-[#9c7c38]">
-                Program Highlights
-              </p>
-              <h2 className="mt-2 text-4xl font-semibold tracking-tight">
-                Designed for Consistency & Excellence
-              </h2>
+              <p className="uppercase tracking-widest text-sm text-[#9c7c38]">Program Highlights</p>
+              <h2 className="mt-2 text-4xl font-semibold tracking-tight">Designed for Consistency & Excellence</h2>
             </div>
             <Link
               href="/contact"
@@ -760,17 +884,8 @@ export default function Home() {
               text="Each student logs in privately and tracks their own Sabak, Dhor, and weekly goal progress."
               icon={
                 <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none">
-                  <path
-                    d="M12 12a4 4 0 100-8 4 4 0 000 8z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M4 20a8 8 0 0116 0"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
+                  <path d="M12 12a4 4 0 100-8 4 4 0 000 8z" stroke="currentColor" strokeWidth="2" />
+                  <path d="M4 20a8 8 0 0116 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               }
             />
@@ -782,12 +897,8 @@ export default function Home() {
       <section id="faq" className="py-24">
         <div className="max-w-4xl mx-auto px-6 sm:px-10">
           <div className="text-center mb-12">
-            <p className="uppercase tracking-widest text-sm text-[#9c7c38]">
-              Questions & Answers
-            </p>
-            <h2 className="mt-2 text-4xl font-semibold tracking-tight">
-              Frequently Asked Questions
-            </h2>
+            <p className="uppercase tracking-widest text-sm text-[#9c7c38]">Questions & Answers</p>
+            <h2 className="mt-2 text-4xl font-semibold tracking-tight">Frequently Asked Questions</h2>
           </div>
 
           <div className="grid gap-4">
@@ -820,15 +931,12 @@ export default function Home() {
 
             <div className="grid md:grid-cols-12 gap-10 items-center relative">
               <div className="md:col-span-8">
-                <p className="uppercase tracking-widest text-sm text-[#9c7c38]">
-                  Ready to begin?
-                </p>
+                <p className="uppercase tracking-widest text-sm text-[#9c7c38]">Ready to begin?</p>
                 <h2 className="mt-2 text-4xl font-semibold tracking-tight">
                   Enrol and start tracking your Hifdh journey today
                 </h2>
-                <p className="mt-4 text-gray-700 text-lg leading-relaxed">
-                  A focused system for daily Sabak, consistent Dhor, and weekly targets — built for
-                  clarity, discipline, and steady progress.
+                <p className="mt-4 text-gray-800 text-lg leading-relaxed">
+                  A focused system for daily Sabak, consistent Dhor, and weekly targets — built for clarity, discipline, and steady progress.
                 </p>
               </div>
 
@@ -855,7 +963,6 @@ export default function Home() {
       <footer className="border-t border-gray-200 bg-white/60 backdrop-blur">
         <div className="max-w-7xl mx-auto px-6 sm:px-10 py-14">
           <div className="grid gap-10 lg:grid-cols-12 items-start">
-            {/* brand */}
             <div className="lg:col-span-4">
               <div className="flex items-center gap-4">
                 <div className="h-[64px] w-[64px] rounded-3xl bg-white/70 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
@@ -863,7 +970,7 @@ export default function Home() {
                 </div>
                 <div>
                   <div className="font-semibold text-lg">Al Qadr</div>
-                  <div className="text-sm text-gray-600">Hifdh Class • Northcliff</div>
+                  <div className="text-sm text-gray-700">Hifdh Class • Northcliff</div>
                 </div>
               </div>
 
@@ -877,8 +984,6 @@ export default function Home() {
                   WhatsApp
                 </a>
 
-                {/* ✅ removed Email button */}
-
                 <a
                   href="https://www.google.com/maps/search/?api=1&query=49+Mountainview+Drive,+Northcliff,+Randburg,+2115"
                   target="_blank"
@@ -890,42 +995,25 @@ export default function Home() {
               </div>
             </div>
 
-            {/* links */}
             <div className="lg:col-span-7 lg:col-start-6">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
                 <div>
                   <div className="text-sm font-semibold text-gray-900 mb-4">Explore</div>
                   <div className="space-y-3">
-                    <a href="/" className="block text-sm text-gray-700 hover:text-black">
-                      Home
-                    </a>
-                    <a href="#about" className="block text-sm text-gray-700 hover:text-black">
-                      About
-                    </a>
-                    <a href="#faq" className="block text-sm text-gray-700 hover:text-black">
-                      FAQ
-                    </a>
-                    <a href="/contact" className="block text-sm text-gray-700 hover:text-black">
-                      Contact
-                    </a>
+                    <a href="/" className="block text-sm text-gray-700 hover:text-black">Home</a>
+                    <a href="#about" className="block text-sm text-gray-700 hover:text-black">About</a>
+                    <a href="#faq" className="block text-sm text-gray-700 hover:text-black">FAQ</a>
+                    <a href="/contact" className="block text-sm text-gray-700 hover:text-black">Contact</a>
                   </div>
                 </div>
 
                 <div>
                   <div className="text-sm font-semibold text-gray-900 mb-4">Student Portal</div>
                   <div className="space-y-3">
-                    <a href="/login" className="block text-sm text-gray-700 hover:text-black">
-                      Sign In
-                    </a>
-                    <a href="/signup" className="block text-sm text-gray-700 hover:text-black">
-                      Enrol (Sign Up)
-                    </a>
-                    <a href="/my-progress" className="block text-sm text-gray-700 hover:text-black">
-                      My Progress
-                    </a>
-                    <a href="/overview" className="block text-sm text-gray-700 hover:text-black">
-                      Overview
-                    </a>
+                    <a href="/login" className="block text-sm text-gray-700 hover:text-black">Sign In</a>
+                    <a href="/signup" className="block text-sm text-gray-700 hover:text-black">Enrol (Sign Up)</a>
+                    <a href="/my-progress" className="block text-sm text-gray-700 hover:text-black">My Progress</a>
+                    <a href="/overview" className="block text-sm text-gray-700 hover:text-black">Overview</a>
                     {user && isAdmin ? (
                       <a href="/admin" className="block text-sm text-gray-700 hover:text-black">
                         Admin Dashboard
@@ -937,12 +1025,8 @@ export default function Home() {
                 <div>
                   <div className="text-sm font-semibold text-gray-900 mb-4">Program</div>
                   <div className="space-y-3">
-                    <a href="#about" className="block text-sm text-gray-700 hover:text-black">
-                      Structure
-                    </a>
-                    <a href="/signup" className="block text-sm text-gray-700 hover:text-black">
-                      Enrolment
-                    </a>
+                    <a href="#about" className="block text-sm text-gray-700 hover:text-black">Structure</a>
+                    <a href="/signup" className="block text-sm text-gray-700 hover:text-black">Enrolment</a>
                   </div>
                 </div>
               </div>
@@ -950,13 +1034,9 @@ export default function Home() {
               <div className="mt-10 rounded-3xl border border-gray-200 bg-gradient-to-br from-white/70 to-white/40 backdrop-blur p-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <div className="text-sm uppercase tracking-widest text-[#9c7c38]">
-                      Student Portal
-                    </div>
+                    <div className="text-sm uppercase tracking-widest text-[#9c7c38]">Student Portal</div>
                     <div className="mt-1 font-semibold text-lg">Ready to begin your journey?</div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      Sign up and start tracking daily progress.
-                    </div>
+                    <div className="mt-1 text-sm text-gray-700">Sign up and start tracking daily progress.</div>
                   </div>
                   <div className="flex gap-3">
                     <a
@@ -979,13 +1059,11 @@ export default function Home() {
 
           <div className="my-10 h-px bg-gray-200" />
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-600">
             <p>© {new Date().getFullYear()} Al Qadr Hifdh Class. All rights reserved.</p>
 
             <div className="flex items-center gap-4">
-              <a href="#top" className="hover:text-black">
-                Back to top ↑
-              </a>
+              <a href="#top" className="hover:text-black">Back to top ↑</a>
               <span className="text-gray-300">|</span>
             </div>
           </div>
