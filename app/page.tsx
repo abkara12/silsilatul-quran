@@ -166,9 +166,11 @@ function InstallAppPrompt() {
                 </div>
               ) : (
                 <div>
-                
+                  A calm, focused space for daily Qur’an progress.
+                  <div className="mt-2 text-xs text-gray-600">
+              
                   </div>
-                
+                </div>
               )}
             </div>
           )}
