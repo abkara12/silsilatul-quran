@@ -831,7 +831,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 sm:px-10">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10">
             <div>
-              <p className="uppercase tracking-widest text-sm text-[#9C7C38]">Program Highlights</p>
+              <p className="uppercase tracking-widest text-sm text-[#5E4A1D]">Program Highlights</p>
               <h2 className="mt-2 text-4xl font-semibold tracking-tight">Designed for Consistency & Excellence</h2>
             </div>
             <Link
@@ -889,7 +889,7 @@ export default function Home() {
       <section id="faq" className="py-24">
         <div className="max-w-4xl mx-auto px-6 sm:px-10">
           <div className="text-center mb-12">
-            <p className="uppercase tracking-widest text-sm text-[#9C7C38]">Questions & Answers</p>
+            <p className="uppercase tracking-widest text-sm text-[#5E4A1D]">Questions & Answers</p>
             <h2 className="mt-2 text-4xl font-semibold tracking-tight">Frequently Asked Questions</h2>
           </div>
 
