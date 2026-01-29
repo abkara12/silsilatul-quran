@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     // ✅ Browser tab + general favicon requests (browsers often request /favicon.ico)
     icon: [
       { url: "/icons/favicon.ico" , type: "image/x-icon" },
-      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/icon-512.png", type: "image/png", sizes: "512x512" },
     ],
 
     // ✅ iPhone/iPad Home Screen icon (Safari)
