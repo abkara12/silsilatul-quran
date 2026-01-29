@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 
   icons: {
     icon: [
-      // Browser tab icon
-      { url: "/icons/favicon.ico", type: "image/x-icon" },
+    { url: "/icons/favicon.ico" }, // IMPORTANT: put favicon.ico in /public (root)
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
     apple: [
       // iPhone add-to-home-screen icon fallback
