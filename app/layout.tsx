@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   icons: {
     // ✅ Browser tab + general favicon requests (browsers often request /favicon.ico)
     icon: [
-      { url: "/favicon.ico" },
+      { url: "/icons/favicon.ico" },
       { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
 
