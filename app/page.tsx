@@ -128,7 +128,7 @@ function InstallAppPrompt() {
             <div>
               <div className="text-xs uppercase tracking-widest text-[#9c7c38]">Install App</div>
               <h3 className="mt-2 text-xl font-semibold tracking-tight text-gray-900">
-                Add the Al Qadr hifdh class app to your Home Screen
+                Add the Hifdh Tracker App to your Home Screen
               </h3>
             </div>
 
@@ -555,10 +555,10 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-                    <Image src="/logo.png" alt="Al Qadr" width={58} height={58} className="rounded" priority />
+                    <Image src="/hifdh-tracker-logo" alt="Hifdh Tracker" width={58} height={58} className="rounded" priority />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold leading-tight">Al Qadr</div>
+                    <div className="text-sm font-semibold leading-tight">Hifdh Tracker</div>
                     <div className="text-xs text-gray-700">Hifdh Class • Menu</div>
                   </div>
                 </div>
@@ -657,7 +657,7 @@ export default function Home() {
           <div className="lg:col-span-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/60 backdrop-blur px-4 py-2 text-sm">
               <span className="h-2 w-2 rounded-full bg-[#9c7c38]" />
-              <span className="text-gray-800">Northcliff • Hifdh Class</span>
+              <span className="text-gray-800">Hifdh Tracker</span>
             </div>
 
             <h1 className="mt-6 text-4xl sm:text-6xl font-bold leading-[1.05] tracking-tight">
@@ -667,7 +667,7 @@ export default function Home() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-gray-800 leading-relaxed max-w-2xl">
-              Join the Al Qadr Hifdh Program in Northcliff — a journey of memorisation, discipline,
+              Join the Hifdh Tracker Program — a journey of memorisation, discipline,
               and spiritual growth. Track your daily Sabak, Dhor, Sabak Dhor and weekly goals — all
               in one place.
             </p>
