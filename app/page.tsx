@@ -460,7 +460,7 @@ export default function Home() {
       <header className="max-w-7xl mx-auto px-6 sm:px-10 py-7 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-            <Image src="/logo1.png" alt="Hifdh Journal" width={58} height={58} className="rounded" priority />
+            <Image src="/logo1.png" alt="Hifdh Journal" width={80} height={80} className="rounded" priority />
           </div>
         </div>
 
@@ -555,7 +555,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-                    <Image src="/logo1.png" alt="Hifdh Journal" width={58} height={58} className="rounded" priority />
+                    <Image src="/logo1.png" alt="Hifdh Journal" width={80} height={80} className="rounded" priority />
                   </div>
                   <div>
                     <div className="text-sm font-semibold leading-tight">Hifdh Journal</div>
@@ -958,7 +958,7 @@ export default function Home() {
             <div className="lg:col-span-4">
               <div className="flex items-center gap-4">
                <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-            <Image src="/logo1.png" alt="Hifdh Journal" width={58} height={58} className="rounded" priority />
+            <Image src="/logo1.png" alt="Hifdh Journal" width={80} height={80} className="rounded" priority />
           </div>
                 <div>
                   <div className="font-semibold text-lg">Hifdh Journal</div>

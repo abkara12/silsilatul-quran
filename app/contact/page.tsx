@@ -39,8 +39,8 @@ export default function ContactPage() {
           <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
                         <Image  src="/logo1.png"
                         alt="Hifdh Journal"
-                        width={58}
-                        height={58}
+                        width={80}
+                        height={80}
                         className="rounded" />
                       </div>
 
