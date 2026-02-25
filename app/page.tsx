@@ -642,37 +642,49 @@ export default function Home() {
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              {user ? (
-                <>
-                 <Link
+             {user ? (
+    isAdmin ? (
+      // ✅ Admin buttons
+      <>
+        <Link
           href="/admin"
           className="inline-flex items-center justify-center h-12 px-8 rounded-full border border-gray-300 bg-white/40 backdrop-blur text-base font-medium hover:bg-white/70 transition-colors"
         >
           Admin Dashboard
         </Link>
-                  <Link
-                    href="/overview"
-                    className="inline-flex items-center justify-center h-12 px-8 rounded-full bg-black text-white text-base font-medium hover:bg-gray-900 shadow-sm"
-                  >
-                    View Overview
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/signup"
-                    className="inline-flex items-center justify-center h-12 px-8 rounded-full bg-black text-white text-base font-medium hover:bg-gray-900 shadow-sm"
-                  >
-                    Begin Your Journey
-                  </Link>
-                  <a
-                    href="#about"
-                    className="inline-flex items-center justify-center h-12 px-8 rounded-full border border-gray-300 bg-white/40 backdrop-blur text-base font-medium hover:bg-white/70 transition-colors"
-                  >
-                    Explore Program
-                  </a>
-                </>
-              )}
+        <Link
+          href="/overview"
+          className="inline-flex items-center justify-center h-12 px-8 rounded-full bg-black text-white text-base font-medium hover:bg-gray-900 shadow-sm"
+        >
+          Students Overview
+        </Link>
+      </>
+    ) : (
+      // ✅ Student button
+      <Link
+        href="/overview"
+        className="inline-flex items-center justify-center h-12 px-8 rounded-full bg-black text-white text-base font-medium hover:bg-gray-900 shadow-sm"
+      >
+        My Overview
+      </Link>
+    )
+  ) : (
+    // ✅ Guest buttons
+    <>
+      <Link
+        href="/signup"
+        className="inline-flex items-center justify-center h-12 px-8 rounded-full bg-black text-white text-base font-medium hover:bg-gray-900 shadow-sm"
+      >
+        Begin My Journey
+      </Link>
+      <a
+        href="#about"
+        className="inline-flex items-center justify-center h-12 px-8 rounded-full border border-gray-300 bg-white/40 backdrop-blur text-base font-medium hover:bg-white/70 transition-colors"
+      >
+        Explore Program
+      </a>
+    </>
+  )}
             </div>
 
             <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl items-stretch">
