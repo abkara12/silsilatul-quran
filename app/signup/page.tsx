@@ -86,7 +86,7 @@ export default function SignupPage() {
         <div className="flex items-center justify-between">
           <Link href="/" className="inline-flex items-center gap-3">
             <div className="h-[80px] w-[85px] rounded-xl bg-white/100 backdrop-blur border border-gray-200 shadow-sm grid place-items-center">
-              <Image src="/logo3.png" alt="Hifdh Journal" width={58} height={58} className="rounded" />
+              <Image src="/logo4.png" alt="Hifdh Journal" width={58} height={58} className="rounded" />
             </div>
           </Link>
           <Link href="/login" className="text-sm font-medium text-gray-700 hover:text-black">
