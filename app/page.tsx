@@ -475,12 +475,7 @@ export default function Home() {
                 </Link>
               ) : null}
 
-              <Link
-                href="/overview"
-                className="inline-flex items-center justify-center h-11 px-5 rounded-full border border-gray-300 bg-white/60 backdrop-blur text-sm font-medium hover:bg-white"
-              >
-                Overview
-              </Link>
+             
             </>
           ) : (
             <>
@@ -588,7 +583,6 @@ export default function Home() {
                     {isAdmin ? (
                       <MenuRow href="/admin" label="Admin Dashboard" sub="Manage students" onClick={closeMenu} />
                     ) : null}
-                    <MenuRow href="/overview" label="Overview" sub="See your history" onClick={closeMenu} />
                   </>
                 ) : (
                   <>
@@ -944,7 +938,6 @@ Through focused Sabak tracking, Dhor monitoring, weekly targets, and personalise
                   <div className="space-y-3">
                     <a href="/login" className="block text-sm text-gray-700 hover:text-black">Sign In</a>
                     <a href="/signup" className="block text-sm text-gray-700 hover:text-black">Enrol (Sign Up)</a>
-                    <a href="/overview" className="block text-sm text-gray-700 hover:text-black">Overview</a>
                     {user && isAdmin ? (
                       <a href="/admin" className="block text-sm text-gray-700 hover:text-black">
                         Admin Dashboard
