@@ -1,7 +1,7 @@
 {
-  "name": "Al-Qadr Hifdh Class",
-  "short_name": "Al-Qadr Hifdh",
-  "description": "Al-Qadr Hifdh Class • Northcliff",
+  "name": "Hifdh Journal",
+  "short_name": "Hifdh Journal",
+  "description": "Hifdh Journal is a comprehensive tracking system designed to help students of the Qur'an monitor their memorisation progress, set structured targets, and maintain consistent revision habits for effective memorisation retention.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
