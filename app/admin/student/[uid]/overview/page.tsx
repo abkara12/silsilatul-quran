@@ -83,8 +83,7 @@ export default function AdminStudentOverviewPage() {
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [studentEmail, setStudentEmail] = useState<string>("");
-
+const [studentName, setStudentName] = useState("");
   const [rows, setRows] = useState<LogRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
 
@@ -115,8 +114,9 @@ export default function AdminStudentOverviewPage() {
       const sDoc = await getDoc(doc(db, "users", studentUid));
       if (sDoc.exists()) {
         const data = sDoc.data() as any;
-        setStudentEmail(toText(data.email));
-      }
+setStudentName(
+  toText(data.username) || toText(data.email) || "Student"
+);      }
     }
 
     async function loadLogs() {
@@ -226,7 +226,7 @@ export default function AdminStudentOverviewPage() {
           <div className="min-w-0">
             <div className="text-sm text-gray-600">Student Overview</div>
             <div className="text-xl font-semibold tracking-tight truncate">
-              {studentEmail || "Student"}
+              {studentName || "Student"}
             </div>
           </div>
         </div>

@@ -157,8 +157,8 @@ export default function AdminStudentPage() {
   const [checking, setChecking] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [studentEmail, setStudentEmail] = useState("");
-
+const [studentName, setStudentName] = useState("");
+  
   // daily fields
   const [sabak, setSabak] = useState("");
   const [sabakDhor, setSabakDhor] = useState("");
@@ -230,8 +230,9 @@ export default function AdminStudentPage() {
       if (sDoc.exists()) {
         const data = sDoc.data() as any;
 
-        setStudentEmail(toText(data.email));
-
+setStudentName(
+  toText(data.username) || toText(data.email) || "Student"
+);
         setWeeklyGoal(toText(data.weeklyGoal));
         setWeeklyGoalWeekKey(toText(data.weeklyGoalWeekKey));
         setWeeklyGoalStartDateKey(toText(data.weeklyGoalStartDateKey));
@@ -460,7 +461,7 @@ export default function AdminStudentPage() {
 
   return (
     <Shell
-      title={`Log work for ${studentEmail || "student"}`}
+      title={`Log work for ${studentName || "student"}`}
       subtitle={`Submitting for ${dateKey} • ${currentWeekKey}`}
       rightSlot={
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
