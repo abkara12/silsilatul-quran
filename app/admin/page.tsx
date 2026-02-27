@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 
-type StudentOption = { uid: string; email: string };
+type StudentOption = { uid: string; username: string };
 
 function getDateKeySA() {
   const now = new Date();
@@ -149,17 +149,17 @@ export default function AdminPage() {
         const qy = query(
           collection(db, "users"),
           where("role", "==", "student"),
-          orderBy("email")
+          orderBy("username")
         );
 
         const snap = await getDocs(qy);
-        const list: StudentOption[] = snap.docs.map((d) => {
-          const data = d.data() as any;
-          return {
-            uid: d.id,
-            email: (data.email || "").toString(),
-          };
-        });
+       const list: StudentOption[] = snap.docs.map((d) => {
+  const data = d.data() as any;
+  return {
+    uid: d.id,
+    username: (data.username || data.email || "Unnamed").toString(),
+  };
+});
 
         setStudents(list);
 
@@ -310,7 +310,7 @@ export default function AdminPage() {
                 ) : (
                   students.map((s) => (
                     <option key={s.uid} value={s.uid}>
-                      {s.email}
+                      {s.username}
                     </option>
                   ))
                 )}

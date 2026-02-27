@@ -28,6 +28,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -42,16 +43,17 @@ export default function SignupPage() {
       const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
 
       // ✅ Create a profile doc so Admin can search students by email + set roles
-      await setDoc(
-        doc(db, "users", cred.user.uid),
-        {
-          email: (cred.user.email ?? cleanEmail).toLowerCase(),
-          role: "student",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+     await setDoc(
+  doc(db, "users", cred.user.uid),
+  {
+    email: (cred.user.email ?? cleanEmail).toLowerCase(),
+    username: username.trim(),
+    role: "student",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  },
+  { merge: true }
+);
 
       router.push("/");
     } catch (error: any) {
@@ -149,6 +151,19 @@ export default function SignupPage() {
               )}
 
               <form onSubmit={onSubmit} className="mt-6 grid gap-4">
+              <div>
+              <label className="text-sm font-medium text-gray-800">
+              Student's Name
+              </label>
+              <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              type="text"
+                required
+                  placeholder="e.g. Muhammad Ahmed"
+                className="mt-2 w-full h-12 rounded-2xl border border-gray-200 bg-white/80 px-4 outline-none focus:ring-2 focus:ring-[#9c7c38]/40"
+                />
+                </div>
                 <div>
                   <label className="text-sm font-medium text-gray-800">Email</label>
                   <input
