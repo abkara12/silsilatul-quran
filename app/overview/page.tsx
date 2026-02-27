@@ -198,7 +198,7 @@ export default function OverviewPage() {
               <p className="uppercase tracking-widest text-xs text-[#9c7c38]">History table</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">Your daily logs</h2>
               <p className="mt-2 text-gray-700">
-                This includes anything you submit AND anything your Ustad logs for you.
+                This includes everything your Ustad logs for you.
               </p>
             </div>
 
