@@ -171,12 +171,6 @@ export default function OverviewPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/my-progress"
-            className="inline-flex items-center justify-center h-11 px-5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900"
-          >
-            Add Today’s Progress
-          </Link>
-          <Link
             href="/"
             className="inline-flex items-center justify-center h-11 px-5 rounded-full border border-gray-300 bg-white/60 backdrop-blur text-sm font-medium hover:bg-white"
           >
@@ -225,12 +219,7 @@ export default function OverviewPage() {
                   Start by submitting your first day on the My Progress page.
                 </p>
                 <div className="mt-4">
-                  <Link
-                    href="/my-progress"
-                    className="inline-flex items-center justify-center h-11 px-6 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900"
-                  >
-                    Go to My Progress
-                  </Link>
+                 
                 </div>
               </div>
             ) : (
