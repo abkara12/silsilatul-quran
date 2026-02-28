@@ -215,9 +215,7 @@ export default function OverviewPage() {
             ) : rows.length === 0 ? (
               <div className="rounded-2xl border border-gray-200 bg-white/70 p-6">
                 <div className="text-lg font-semibold">No logs yet</div>
-                <p className="mt-2 text-gray-700">
-                  Start by submitting your first day on the My Progress page.
-                </p>
+                
                 <div className="mt-4">
                  
                 </div>
