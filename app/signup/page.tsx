@@ -105,7 +105,7 @@ export default function SignupPage() {
                 Create your account
               </h1>
               <p className="mt-3 text-gray-700 leading-relaxed">
-                Sign up to log your daily <span className="font-semibold">Sabak</span>,{" "}
+                Sign up to track <span className="font-semibold">Sabak</span>,{" "}
                 <span className="font-semibold">Sabak Dhor</span>,{" "}
                 <span className="font-semibold">Dhor</span> and your{" "}
                 <span className="font-semibold">weekly goals</span>.

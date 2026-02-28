@@ -89,7 +89,7 @@ export default function LoginPage() {
                 Sign in to continue
               </h1>
               <p className="mt-3 text-gray-700 leading-relaxed">
-                Students log daily work. Admins can select any student and log work for them.
+               Admins can select any student and log work for them.
               </p>
             </div>
 
