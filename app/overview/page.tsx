@@ -52,21 +52,22 @@ type LogRow = {
   id: string;
   dateKey?: string;
 
-  sabak?: string;
+   sabak?: string;
   sabakRead?: string;
+  sabakReadNotes?: string;
 
   sabakDhor?: string;
   sabakDhorRead?: string;
+  sabakDhorReadNotes?: string;
 
   dhor?: string;
   dhorRead?: string;
+  dhorReadNotes?: string;
 
   weeklyGoal?: string;
 
   sabakDhorMistakes?: string;
   dhorMistakes?: string;
-
-  notes?: string; // ✅ ADD THIS
 
   weeklyGoalStartDateKey?: string;
   weeklyGoalCompletedDateKey?: string;
@@ -351,7 +352,7 @@ export default function OverviewPage() {
                             {toText(r.sabakRead) || "—"}
                           </td>
                          <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
-  {toText(r.notes) || "—"}
+  {toText(r.sabakReadNotes) || "—"}
 </td>
 
                           <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
@@ -361,7 +362,7 @@ export default function OverviewPage() {
                             {toText(r.sabakDhorRead) || "—"}
                           </td>
                           <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
-  {toText(r.notes) || "—"}
+  {toText(r.sabakDhorReadNotes) || "—"}
 </td>
 
                           <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
@@ -371,7 +372,7 @@ export default function OverviewPage() {
                             {toText(r.dhorRead) || "—"}
                           </td>
                           <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
-  {toText(r.notes) || "—"}
+  {toText(r.dhorReadNotes) || "—"}
 </td>
 
                           <td className="py-4 px-4 text-gray-800 border-l border-gray-100">
