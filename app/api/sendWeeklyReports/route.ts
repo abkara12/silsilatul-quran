@@ -799,7 +799,7 @@ export async function GET() {
 
 ━━━━━━━━━━━━━━━━━━
 
-🌟 *Teacher Highlight*
+🌟 *Teacher *
 
 ${teacherHighlight}
 
