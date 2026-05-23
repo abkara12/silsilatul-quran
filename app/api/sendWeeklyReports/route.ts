@@ -1018,7 +1018,7 @@ Every letter recited is an investment for this world and the Aakhirah. May Allah
                       target="_blank"
                       class="btn wa-btn"
                     >
-                      Send on WhatsApp
+                      Send on WhatsApps
                     </a>`
                   : `<span class="btn disabled">No parent number</span>`
               }
