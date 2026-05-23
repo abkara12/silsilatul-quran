@@ -1008,7 +1008,7 @@ Every letter recited is an investment for this world and the Aakhirah. May Allah
                   r.report
                 )})"
               >
-                Copy Report
+                Copy Reports
               </button>
 
               ${
